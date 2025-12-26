@@ -1,0 +1,186 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/////////////////////
+// ENUMS
+/////////////////////
+
+enum UserStatus {
+  ONLINE
+  OFFLINE
+  AWAY
+}
+
+enum NotificationType {
+  FOLLOW
+  LIKE
+  COMMENT
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+}
+
+/////////////////////
+// USER
+/////////////////////
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  email     String   @unique
+  password  String
+  bio       String?
+  avatarUrl String?
+
+  status    UserStatus @default(OFFLINE)
+
+  posts     Thread[]
+  comments  Comment[]
+  likes     Like[]
+  messages Message[]
+
+
+  followers Follow[] @relation("followers")
+  following Follow[] @relation("following")
+
+  notifications Notification[]
+  conversations ConversationMember[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/////////////////////
+// FOLLOW SYSTEM
+/////////////////////
+
+model Follow {
+  id          String   @id @default(uuid())
+  followerId  String
+  followingId String
+
+  follower   User @relation("following", fields: [followerId], references: [id])
+  following  User @relation("followers", fields: [followingId], references: [id])
+
+  createdAt  DateTime @default(now())
+
+  @@unique([followerId, followingId])
+}
+
+/////////////////////
+// THREAD (POST)
+/////////////////////
+
+model Thread {
+  id        String   @id @default(uuid())
+  authorId  String
+  content   String
+  mediaUrl  String?
+
+  author    User     @relation(fields: [authorId], references: [id])
+  comments  Comment[]
+  likes     Like[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/////////////////////
+// COMMENTS
+/////////////////////
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+
+  authorId  String
+  threadId  String
+  parentId  String?
+
+  author    User     @relation(fields: [authorId], references: [id])
+  thread    Thread   @relation(fields: [threadId], references: [id])
+  parent    Comment? @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   Comment[] @relation("CommentReplies")
+
+  createdAt DateTime @default(now())
+}
+
+/////////////////////
+// LIKES
+/////////////////////
+
+model Like {
+  id        String   @id @default(uuid())
+  userId    String
+  threadId  String
+
+  user      User     @relation(fields: [userId], references: [id])
+  thread    Thread   @relation(fields: [threadId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, threadId])
+}
+
+/////////////////////
+// NOTIFICATIONS
+/////////////////////
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType
+  entityId  String
+  isRead    Boolean          @default(false)
+
+  user      User             @relation(fields: [userId], references: [id])
+
+  createdAt DateTime        @default(now())
+}
+
+/////////////////////
+// CONVERSATIONS (CHAT)
+/////////////////////
+
+model Conversation {
+  id           String   @id @default(uuid())
+  isGroup      Boolean  @default(false)
+
+  participants ConversationMember[]
+  messages     Message[]
+
+  createdAt    DateTime @default(now())
+}
+
+model ConversationMember {
+  id             String   @id @default(uuid())
+  conversationId String
+  userId         String
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  user           User         @relation(fields: [userId], references: [id])
+
+  joinedAt       DateTime @default(now())
+}
+
+model Message {
+  id             String   @id @default(uuid())
+  conversationId String
+  senderId       String
+  content        String
+  type           MessageType @default(TEXT)
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  sender         User         @relation(fields: [senderId], references: [id])
+
+  createdAt      DateTime @default(now())
+}
