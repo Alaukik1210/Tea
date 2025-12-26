@@ -3,59 +3,50 @@ import { redisClient } from "../../config/redis.js";
 import { publishOtpMail } from "../../queues/producers/producer.js";
 import { prisma } from "../../lib/db.js";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import { env } from "../../config/env.js";
+import {
+  BadRequestError,
+  HttpError,
+} from "../../lib/errors.js";
 
 export const signupUser = tryCatch(async (req, res) => {
   const { email, password, username } = req.body;
+
   if (!email || !password || !username) {
-    return res.status(400).json({ error: "All fields are required" });
+    throw new BadRequestError("All fields are required");
   }
 
   if (password.length < 8) {
-    return res
-      .status(400)
-      .json({ error: "Password must be at least 8 characters" });
+    throw new BadRequestError("Password must be at least 8 characters");
   }
 
-  //rate limiting
   const rateLimitKey = `otp:ratelimit:${email}`;
-  const ratelimit = await redisClient.get(rateLimitKey);
-  if (ratelimit) {
-    return res
-      .status(429)
-      .json({ error: "Too many requests, please try again later." });
+  if (await redisClient.get(rateLimitKey)) {
+    throw new HttpError(429, "Too many requests, please try again later.");
   }
 
-  const existingUser = await prisma.user.findUnique({
-    where: { email },
-  });
-
-  if (existingUser) {
-    return res.status(400).json({ error: "email already exists" });
+  if (await prisma.user.findUnique({ where: { email } })) {
+    throw new BadRequestError("Email already exists");
   }
 
-  const existingUserName = await prisma.user.findUnique({
-    where: { username },
-  });
-
-  if (existingUserName) {
-    return res.status(400).json({ error: "Username already exists" });
+  if (await prisma.user.findUnique({ where: { username } })) {
+    throw new BadRequestError("Username already exists");
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
 
   await redisClient.set(
     `signup:${email}`,
-    JSON.stringify({ email, password: hashedPassword, username }),
+    JSON.stringify({ email, username, password: hashedPassword }),
     { EX: 300 }
   );
 
-  //generate otp
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const otpKey = `otp:${email}`;
-  await redisClient.set(otpKey, otp, { EX: 300 });
+
+  await redisClient.set(`otp:${email}`, otp, { EX: 300 });
   await redisClient.set(rateLimitKey, "true", { EX: 60 });
 
-  //send otp
   await publishOtpMail({
     to: email,
     subject: "OTP for signup",
@@ -65,42 +56,57 @@ export const signupUser = tryCatch(async (req, res) => {
   res.json({ message: "OTP sent successfully" });
 });
 
-
-
-
-
-
 export const verifyOtp = tryCatch(async (req, res) => {
   const { email, otp } = req.body;
 
   const storedOtp = await redisClient.get(`otp:${email}`);
   if (!storedOtp || storedOtp !== otp) {
-    return res.status(400).json({ error: "Invalid or expired OTP" });
+    throw new BadRequestError("Invalid or expired OTP");
   }
+
+  await redisClient.del(`otp:${email}`);
 
   const signupData = await redisClient.get(`signup:${email}`);
   if (!signupData) {
-    return res.status(400).json({ error: "Signup session expired" });
+    throw new BadRequestError("Signup session expired");
   }
 
   const { username, password } = JSON.parse(signupData);
 
-  // 3️⃣ Create user in DB
-  const user = await prisma.user.create({
-    data: {
-      email,
-      username,
-      password, // already hashed
-    },
+  let user;
+  try {
+    user = await prisma.user.create({
+      data: { email, username, password },
+    });
+  } catch (err: any) {
+    if (err.code === "P2002") {
+      throw new BadRequestError("User already exists");
+    }
+    throw err;
+  }
+
+  await redisClient.del(`signup:${email}`);
+  await redisClient.del(`otp:ratelimit:${email}`);
+
+  const token = jwt.sign(
+    { id: user.id },
+    env.JWT_SECRET,
+    { expiresIn: "7d" }
+  );
+
+  res.cookie("token", token, {
+    httpOnly: true,
+    secure: false,
+    sameSite: "strict",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 
-  // 4️⃣ Cleanup Redis
-  await redisClient.del(`otp:${email}`);
-  await redisClient.del(`signup:${email}`);
-
-  // 5️⃣ Success
-  return res.status(201).json({
+  res.status(201).json({
     message: "Account created successfully",
-    userId: user.id,
+    user: {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+    },
   });
 });

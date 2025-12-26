@@ -6,7 +6,7 @@ const EnvSchema = z.object({
   DATABASE_URL: z.string().url(),
   PORT: z.string().default("8000"),
   REDIS_URL: z.string().url(),
-  // JWT_SECRET: z.string().min(32),
+  JWT_SECRET: z.string().min(12),
   CLOUDINARY_CLOUD_NAME: z.string(),
   CLOUDINARY_API_KEY: z.string(),
   CLOUDINARY_API_SECRET: z.string(),
