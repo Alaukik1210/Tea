@@ -5,10 +5,9 @@ import { prisma } from "../../lib/db.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { env } from "../../config/env.js";
-import {
-  BadRequestError,
-  HttpError,
-} from "../../lib/errors.js";
+import { BadRequestError, HttpError, NotfoundError } from "../../lib/errors.js";
+import { error } from "node:console";
+import { AuthenticatedRequest } from "../../middleware/isAuth.js";
 
 export const signupUser = tryCatch(async (req, res) => {
   const { email, password, username } = req.body;
@@ -88,15 +87,11 @@ export const verifyOtp = tryCatch(async (req, res) => {
   await redisClient.del(`signup:${email}`);
   await redisClient.del(`otp:ratelimit:${email}`);
 
-  const token = jwt.sign(
-    { id: user.id },
-    env.JWT_SECRET,
-    { expiresIn: "7d" }
-  );
+  const token = jwt.sign({ id: user.id }, env.JWT_SECRET, { expiresIn: "7d" });
 
   res.cookie("token", token, {
     httpOnly: true,
-    secure: false,
+    secure: env.NODE_ENV === "production",
     sameSite: "strict",
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
@@ -110,3 +105,199 @@ export const verifyOtp = tryCatch(async (req, res) => {
     },
   });
 });
+
+export const loginUser = tryCatch(async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) {
+    throw new BadRequestError("All fields are required");
+  }
+  const user = await prisma.user.findUnique({
+    where: {
+      username,
+    },
+  });
+  if (!user) {
+    throw new BadRequestError("Invalid credentials");
+  }
+  const isPasswordValid = await bcrypt.compare(password, user.password);
+  if (!isPasswordValid) {
+    throw new BadRequestError("Invalid credentials");
+  }
+  const token = jwt.sign({ id: user.id }, env.JWT_SECRET, { expiresIn: "7d" });
+
+  res.cookie("token", token, {
+    httpOnly: true,
+    secure: env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+
+  res.status(200).json({
+    message: "Logged in",
+    user: {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+    },
+  });
+});
+
+
+
+export const myProfile = tryCatch(async (req: AuthenticatedRequest, res) => {
+  if (!req.user?.id) {
+    throw new BadRequestError("Not authenticated");
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: req.user.id },
+    select: {
+      id: true,
+      email: true,
+      username: true,
+      bio: true,
+      avatarUrl: true,
+      createdAt: true,
+    },
+  });
+
+  if (!user) {
+    throw new NotfoundError("User not found");
+  }
+
+  res.json(user);
+});
+
+export const updateName = tryCatch(async (req: AuthenticatedRequest, res) => {
+  const { username } = req.body;
+
+  if (!req.user?.id) {
+    throw new BadRequestError("Not authenticated");
+  }
+
+  if (!username) {
+    throw new BadRequestError("Username is required");
+  }
+
+  const updatedUser = await prisma.user.update({
+    where: { id: req.user.id },
+    data: { username },
+    select: {
+      id: true,
+      email: true,
+      username: true,
+    },
+  });
+
+  res.json({
+    message: "Username updated",
+    user: updatedUser,
+  });
+});
+
+
+
+export const getAllUsers = tryCatch(async (_req, res) => {
+  const users = await prisma.user.findMany({
+    select: {
+      id: true,
+      username: true,
+      avatarUrl: true,
+    },
+  });
+
+  res.json(users);
+});
+
+
+export const getAUser = tryCatch(async (req, res) => {
+  const { id } = req.params;
+
+  const user = await prisma.user.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      username: true,
+      bio: true,
+      avatarUrl: true,
+      createdAt: true,
+    },
+  });
+
+  if (!user) {
+    throw new NotfoundError("User not found");
+  }
+
+  res.json(user);
+});
+
+
+
+export const updateUser = tryCatch(
+  async (req: AuthenticatedRequest, res) => {
+    if (!req.user?.id) {
+      throw new BadRequestError("Not authenticated");
+    }
+
+    const {
+      username,
+      email,
+      bio,
+      avatarUrl,
+      name,
+      status,
+    } = req.body;
+
+    if (
+      !username &&
+      !email &&
+      !bio &&
+      !avatarUrl &&
+      !name &&
+      !status
+    ) {
+      throw new BadRequestError("No fields provided to update");
+    }
+
+    const updateData: Record<string, any> = {};
+
+    if (username) updateData.username = username;
+    if (email) updateData.email = email;
+    if (bio !== undefined) updateData.bio = bio;
+    if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl;
+    if (name !== undefined) updateData.name = name;
+    if (status) updateData.status = status;
+
+    let updatedUser;
+    try {
+      updatedUser = await prisma.user.update({
+        where: { id: req.user.id },
+        data: updateData,
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          bio: true,
+          avatarUrl: true,
+          name: true,
+          status: true,
+          updatedAt: true,
+        },
+      });
+    } catch (err: any) {
+      if (err.code === "P2002") {
+        throw new BadRequestError("Username or email already exists");
+      }
+      throw err;
+    }
+
+    if (!updatedUser) {
+      throw new NotfoundError("User not found");
+    }
+
+    res.json({
+      message: "Profile updated successfully",
+      user: updatedUser,
+    });
+  }
+);

@@ -7,6 +7,7 @@ import { startSendOtpConsumer } from "./queues/consumers/consumer.js";
 import userRoute from "./routes/user/user.route.js";
 import dotenv from "dotenv";
 dotenv.config();
+import cookieParser from "cookie-parser";
 
 export function createApp() {
   const app = express();
@@ -24,7 +25,7 @@ export function createApp() {
   app.use(express.json());
 
   //   app.use("/api", apiRouter);
-
+  app.use(cookieParser());
   app.use("/api/v1",userRoute)
   startSendOtpConsumer();
   

@@ -12,6 +12,8 @@ const EnvSchema = z.object({
   CLOUDINARY_API_SECRET: z.string(),
   SMTP_USER: z.string(),
   SMTP_PASS: z.string(),
+  NODE_ENV: z.enum(["development", "production"]).default("development"),
+
 });
 
 const parsed = EnvSchema.safeParse(process.env);
