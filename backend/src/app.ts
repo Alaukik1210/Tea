@@ -4,7 +4,7 @@ import helmet from "helmet";
 import { NotfoundHandler } from "./utils/notFoundErrorHandler.js";
 import { errorHandler } from "./utils/errorHandler.js";
 import { startSendOtpConsumer } from "./queues/consumers/consumer.js";
-import userRoute from "./routes/user/user.route.js";
+import userRoute from "./modules/user/user.route.js";
 import dotenv from "dotenv";
 dotenv.config();
 import cookieParser from "cookie-parser";
@@ -26,7 +26,7 @@ export function createApp() {
 
   //   app.use("/api", apiRouter);
   app.use(cookieParser());
-  app.use("/api/v1",userRoute)
+  app.use("/api/v1/user",userRoute)
   startSendOtpConsumer();
   
   app.use(NotfoundHandler);
