@@ -29,6 +29,13 @@ enum MessageType {
   VIDEO
 }
 
+enum PostType {
+  NORMAL        // normal thought
+  DEBATABLE     // debatable post
+  CLAIM         // claim / facts / blame (AI fallacy detector)
+}
+
+
 /////////////////////
 // USER
 /////////////////////
@@ -85,6 +92,9 @@ model Thread {
   authorId  String
   content   String
   mediaUrl  String?
+
+  
+  postType  PostType @default(NORMAL)
 
   author    User     @relation(fields: [authorId], references: [id])
   comments  Comment[]

@@ -393,7 +393,6 @@ export const followUser = tryCatch(async (req: AuthenticatedRequest, res) => {
       },
     });
   } catch (err: any) {
-    // Handles @@unique([followerId, followingId])
     if (err.code === "P2002") {
       throw new BadRequestError("Already following this user");
     }
@@ -403,7 +402,7 @@ export const followUser = tryCatch(async (req: AuthenticatedRequest, res) => {
   //  Redis updates atomically AFTER DB success
   await redisClient
     .multi()
-    // rate-limit key (NX avoids overwrite)
+    // rate-limit key 
     .set(rateKey, "1", { EX: 3, NX: true })
 
     // cache follow state
