@@ -5,13 +5,13 @@ import { NotfoundHandler } from "./utils/notFoundErrorHandler.js";
 import { errorHandler } from "./utils/errorHandler.js";
 import { startSendOtpConsumer } from "./queues/consumers/consumer.js";
 import userRoute from "./modules/user/user.route.js";
+import threadRoute from "./modules/thread/thread.routes.js";
 import dotenv from "dotenv";
 dotenv.config();
 import cookieParser from "cookie-parser";
 
 export function createApp() {
-  const app = express();
-  //   app.use(clerkMiddleware());
+  const app = express();  
 
   app.use(helmet());
 
@@ -24,9 +24,9 @@ export function createApp() {
 
   app.use(express.json());
 
-  //   app.use("/api", apiRouter);
   app.use(cookieParser());
-  app.use("/api/v1/user",userRoute)
+  app.use("/api/v1/user",userRoute);
+  app.use("/api/v1/thread", threadRoute)
   startSendOtpConsumer();
   
   app.use(NotfoundHandler);
