@@ -230,3 +230,34 @@ export const deleteThread = tryCatch(
     res.json({ message: "Thread deleted successfully" });
   }
 );
+
+export const getAllthread = tryCatch(async (req, res)=>{
+    const threads = await prisma.thread.findMany({
+
+      orderBy: {
+      createdAt: "desc", // ✅ latest post first
+    },
+        select: {
+          id: true,
+          content: true,
+          postType: true,
+          mediaUrl: true,
+          createdAt: true,
+          updatedAt: true,
+          author: {
+            select: {
+              id: true,
+              username: true,
+              avatarUrl: true,
+            },
+          },
+          _count: {
+            select: {
+              likes: true,
+              comments: true,
+            },
+          },
+        },
+      });
+      res.json(threads);
+})
