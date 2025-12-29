@@ -1,0 +1,6 @@
+-- CreateEnum
+CREATE TYPE "BkcLeague" AS ENUM ('BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND', 'MASTER', 'GRANDMASTER');
+
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN     "bkc_league" "BkcLeague" NOT NULL DEFAULT 'BRONZE',
+ADD COLUMN     "bkc_point" INTEGER NOT NULL DEFAULT 0;

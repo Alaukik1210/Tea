@@ -4,6 +4,11 @@ import { redisClient } from "../../config/redis.js";
 import { BadRequestError, NotfoundError } from "../../lib/errors.js";
 import { AuthenticatedRequest } from "../../middleware/isAuth.js";
 import sanitizeHtml from "sanitize-html";
+import {
+  addThreadToGlobalFeed,
+  removeThreadFromGlobalFeed,
+  updateThreadInCache,
+} from "../feed/feed.service.js";
 
 const THREAD_CACHE_TTL = 90; // seconds
 
@@ -56,7 +61,20 @@ export const createThread = tryCatch(
       },
     });
 
-    // 🔁 Feed cache (if exists) should be invalidated here later
+    // 🔁 Add to Redis global feed
+    const threadData = {
+      id: thread.id,
+      content: thread.content,
+      postType: thread.postType,
+      mediaUrl: thread.mediaUrl ?? null,
+      createdAt: thread.createdAt.toISOString(),
+      author: thread.author,
+      stats: { likes: 0, comments: 0 },
+    };
+    await addThreadToGlobalFeed(thread.id, threadData);
+
+    // 🔁 Invalidate author's feed cache pages
+    await invalidateUserFeedCaches(req.user.id);
 
     res.status(201).json(thread);
   }
@@ -182,13 +200,34 @@ export const updateThread = tryCatch(
       select: {
         id: true,
         content: true,
+        postType: true,
         mediaUrl: true,
+        createdAt: true,
         updatedAt: true,
+        author: {
+          select: { id: true, username: true, avatarUrl: true },
+        },
+        _count: {
+          select: { likes: true, comments: true },
+        },
       },
     });
 
-    // 🔁 Invalidate cache
+    // 🔁 Update Redis cache
     await redisClient.del(`thread:${id}`);
+    const threadData = {
+      id: updated.id,
+      content: updated.content,
+      postType: updated.postType,
+      mediaUrl: updated.mediaUrl ?? null,
+      createdAt: updated.createdAt.toISOString(),
+      author: updated.author,
+      stats: {
+        likes: updated._count.likes,
+        comments: updated._count.comments,
+      },
+    };
+    await updateThreadInCache(id, threadData);
 
     res.json({
       message: "Thread updated successfully",
@@ -224,12 +263,31 @@ export const deleteThread = tryCatch(
 
     await prisma.thread.delete({ where: { id } });
 
-    // 🔁 Invalidate cache
+    // 🔁 Remove from Redis
     await redisClient.del(`thread:${id}`);
+    await removeThreadFromGlobalFeed(id);
+    await invalidateUserFeedCaches(req.user.id);
 
     res.json({ message: "Thread deleted successfully" });
   }
 );
+
+async function invalidateUserFeedCaches(userId: string) {
+  try {
+    const patterns = [
+      `feed:user:${userId}:limit:*:cursor:*`,
+      `feed:user:${userId}:limit:*:cursor:none`,
+    ];
+    for (const pattern of patterns) {
+      for await (const key of (redisClient as any).scanIterator({ MATCH: pattern, COUNT: 100 })) {
+        await redisClient.del(key as string);
+      }
+    }
+    // Global feed can also be affected; keep TTL short so we don't mass-delete those.
+  } catch {
+    // Fail quietly; cache will self-expire.
+  }
+}
 
 export const getAllthread = tryCatch(async (req, res)=>{
     const threads = await prisma.thread.findMany({

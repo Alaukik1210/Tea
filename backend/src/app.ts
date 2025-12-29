@@ -9,6 +9,7 @@ import threadRoute from "./modules/thread/thread.routes.js";
 import dotenv from "dotenv";
 dotenv.config();
 import cookieParser from "cookie-parser";
+import feedRoute from "./modules/feed/feed.routes.js";
 
 export function createApp() {
   const app = express();  
@@ -27,6 +28,7 @@ export function createApp() {
   app.use(cookieParser());
   app.use("/api/v1/user",userRoute);
   app.use("/api/v1/thread", threadRoute)
+  app.use("/api/v1/feed", feedRoute)
   startSendOtpConsumer();
   
   app.use(NotfoundHandler);

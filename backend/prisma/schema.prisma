@@ -35,6 +35,15 @@ enum PostType {
   CLAIM         // claim / facts / blame (AI fallacy detector)
 }
 
+enum BkcLeague {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+  DIAMOND
+  MASTER
+  GRANDMASTER
+}
 
 /////////////////////
 // USER
@@ -48,6 +57,8 @@ model User {
   bio       String?
   avatarUrl String?
   name      String?
+  bkc_point Int @default(0)
+  bkc_league BkcLeague @default(BRONZE)
   status    UserStatus @default(OFFLINE)
 
   posts     Thread[]
