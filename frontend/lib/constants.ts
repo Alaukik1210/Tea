@@ -1,0 +1,1 @@
+export const user_url = 'http://localhost:8000/api/v1/user'
