@@ -13,7 +13,6 @@ export default function VerifyOtpClient({
     const router = useRouter();
   const handleOtpComplete = async (otp: string) => {
     console.log("OTP entered:", otp);
-    // 🔥 call verify OTP API here
 
    const  response = await axios.post(`${user_url}/verify`, { email, otp });
     if (response) {

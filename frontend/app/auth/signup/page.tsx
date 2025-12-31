@@ -8,7 +8,6 @@ import { user_url } from "@/lib/constants";
 
 export default function SignupPage(): JSX.Element {
   const router = useRouter();
-// const url = process.env('')
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [username, setUsername] = useState<string>("");
@@ -21,7 +20,6 @@ export default function SignupPage(): JSX.Element {
       return;
     }
 
-    // 🔥 later: call backend -> send OTP
     console.log({ email, password, username });
 
     const  response = await axios.post(`${user_url}/signup`, { email, password, username });
@@ -29,7 +27,6 @@ export default function SignupPage(): JSX.Element {
       alert("OTP sent to your email");
     }
 
-    // ✅ navigate AFTER validation
     router.push(`/auth/signup/verifyotp/${email}`);
   };
 
